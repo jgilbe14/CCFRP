@@ -1,0 +1,135 @@
+library(shiny)
+library(leaflet)
+library(tidyverse)
+
+table_filter <- function(data){
+  data %>% 
+    group_by(DataSetName) %>% 
+    rename("Notes" = `Other notes about data`) %>% 
+    summarize(DataType = unique(DataType),
+              Locations = str_remove_all(paste(Locations, collapse = ', '), "NA, "),
+              Lat = paste(Lat, collapse = ', '),
+              Lon = paste(Lon, collapse = ', '),
+              Start_Year = paste(unique(Start_Year), collapse = ', '),
+              End_Year = paste(unique(End_Year), collapse = ', '),
+              #Public = paste(unique(Public), collapse = ', '),
+              Data_Available  = paste(unique(Data_Available), collapse = ', '),
+              PI = unique(PI),
+              `PI Contact` = unique(`PI Contact`),
+              Funding = unique(Funding),
+              Notes = str_remove_all(paste(Notes, collapse = ', '), "NA, ")) %>% 
+    select(DataType, DataSetName, Locations, Lon, Lat, PI, `PI Contact`, Notes) %>% 
+    rename("Label" = DataSetName, "Name" = DataType, "Longitude" = Lon, "Latitude" = Lat, "PI" = PI, "PI Contact" = `PI Contact`)
+  
+}
+
+subset_filter <- function(data, input){
+  if (input == "All"){
+    return(data %>% 
+             arrange(factor(DataType, levels = c("Physics/Chemistry", "Phytoplankton", "Invertebrates", "Fish", "Marine Mammals", "Humans", "Other"))))
+  }
+  
+  else
+    return(data %>% 
+             arrange(factor(DataType, levels = c("Physics/Chemistry", "Phytoplankton", "Invertebrates", "Fish", "Marine Mammals", "Humans", "Other"))) %>% 
+             filter(DataType == input))
+  
+  
+}
+
+
+ui <- navbarPage(title = HTML("<a href=\"http://www.marine.calpoly.edu/\">CCMS</a>"), 
+                 tabPanel(title = "Data", ## used to be 'data'
+                          ## for some reason, this works with or without fluid page
+                          fluidPage(
+                            titlePanel("Center for Coastal Marine Science datasets"),
+                            sidebarPanel(
+                              selectInput(inputId = "user_datatype",
+                                          label = "Select data type",
+                                          choices = c("All", "Physics/Chemistry", "Phytoplankton", "Invertebrates", "Fish", "Marine Mammals", "Humans", "Other")),
+                              textOutput("background")),
+                            mainPanel(leafletOutput("map1"),
+                                      tableOutput("data_table2")
+                            ))),inverse = T)
+
+server <- function(input, output) {
+  csm_data <- read_csv("CCMS_DataSets.csv") 
+    
+  
+  output$map1 <- renderLeaflet({
+    subset_data <- subset_filter(csm_data, input$user_datatype)
+    leaflet() %>%
+      #setView(lng = -121.338427, lat = 36.203187, zoom = 7.5)%>%
+      addTiles() %>%
+      addMarkers(lng = subset_data$Lon, lat = subset_data$Lat, label = subset_data$DataSetName) %>%
+      addMiniMap(position = "bottomleft", width = 200, height = 200) %>%
+      addProviderTiles("Esri.WorldImagery")
+  })
+  
+  output$full_map <- renderLeaflet({
+    icon_phyto1 <- makeIcon(
+      #iconUrl = "C:/Users/erinj/Documents/GitHub/CCFRP/Icons/phyto1.png",
+      iconUrl = "https://raw.githubusercontent.com/erinmarjo/CCFRP/main/Icons/phyto1.png",
+      iconWidth = 20, iconHeight = 40)
+    icon_cpr <- makeIcon(
+      #iconUrl = "C:/Users/erinj/Documents/GitHub/CCFRP/Icons/choppa150.png",
+      iconUrl = "https://raw.githubusercontent.com/erinmarjo/CCFRP/main/Icons/choppa150.png",
+      iconWidth = 80, iconHeight = 45)
+    icon_tivela <- makeIcon(
+      #iconUrl = "C:/Users/erinj/Documents/GitHub/CCFRP/Icons/tivela.png",
+      iconUrl = "https://raw.githubusercontent.com/erinmarjo/CCFRP/main/Icons/tivela.png",
+      iconWidth = 50, iconHeight = 43)
+    
+    fmap_fish <- csm_data %>%
+      filter(DataType == "Fish")
+    fmap_phyto <- csm_data %>%
+      filter(DataType == "Phytoplankton")
+    fmap_tivela <- csm_data %>%
+      filter(DataType == "Invertebrates")
+    # fmap_human <- csm_data %>%
+    #   filter(DataType == "Humans")
+    # fmap_other <- csm_data %>%
+    #   filter(DataType == "Other")
+    # fmap_physics <- csm_data %>%
+    #   filter(DataType == "Physics/Chemistry")
+    # fmap_mammal <- csm_data %>%
+    #   filter(DataType == "Marine Mammals")
+    # 
+    
+    leaflet() %>%
+      #setView(lng = -120.843112, lat = 35.460225, zoom = 9)%>%
+      addTiles() %>%
+      # addRectangles(lng1 = fmap_corner1$longitude , lat1 = fmap_corner1$latitude, 
+      #               lng2 = fmap_corner4$longitude  , lat2 = fmap_corner4$latitude,
+      #               fillColor = "transparent")%>%
+      addMiniMap(position = "bottomleft", width = 200, height = 200) %>%
+      addMarkers(lng = fmap_fish$Lon, lat = fmap_fish$Lat, icon = icon_cpr,
+                 label = fmap_fish$DataSetName) %>%
+      addMarkers(lng = fmap_phyto$Lon, lat = fmap_phyto$Lat, icon = icon_phyto1,
+                 label = fmap_phyto$DataSetName) %>%
+      addMarkers(lng = fmap_tivela$Lon, lat = fmap_tivela$Lat, icon = icon_tivela,
+                 label = fmap_tivela$DataSetName) %>%
+      # addMarkers(lng = fmap_human$Lon, lat = fmap_human$Lat,
+      #            label = fmap_human$DataSetName) %>%
+      # addMarkers(lng = fmap_other$Lon, lat = fmap_other$Lat,
+      #            label = fmap_other$DataSetName) %>%
+      # addMarkers(lng = fmap_physics$Lon, lat = fmap_physics$Lat,
+      #            label = fmap_physics$DataSetName) %>%
+      # addMarkers(lng = fmap_mammal$Lon, lat = fmap_mammal$Lat,
+      #            label = fmap_mammal$DataSetName) %>%
+      addProviderTiles("Esri.WorldImagery")
+  })
+
+  
+  output$data_table <- renderTable({table_filter(csm_data)
+  })
+  
+  output$data_table2 <- renderTable({
+    subset_data <- subset_filter(csm_data, input$user_datatype)
+    table_filter(subset_data) %>% 
+    arrange(factor(Name, levels = c("Physics/Chemistry", "Phytoplankton", "Invertebrates",
+                                          "Fish", "Marine Mammals", "Humans", "Other")))
+  })
+}
+
+shinyApp(ui = ui, server = server)
